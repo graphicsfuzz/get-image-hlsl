@@ -1,6 +1,8 @@
 #include "stdafx.h"
 
 using namespace Microsoft::WRL;
+using namespace DirectX;
+
 
 void checkFail(HRESULT hr) {
 	if (FAILED(hr)) {
@@ -52,12 +54,17 @@ void CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	std::wstring vertex_shader;
 	std::wstring pixel_shader;
+	std::wstring output(L"output.png");
 
 	for (int i = 1; i < argc; i++) {
 		std::wstring curr_arg = std::wstring(argv[i]);
 		if (!curr_arg.compare(0, 2, L"--")) {
 			if (curr_arg == L"--vertex") {
 				vertex_shader = argv[++i];
+				continue;
+			}
+			else if (curr_arg == L"--output") {
+				output = argv[++i];
 				continue;
 			}
 			std::wcerr << "Unknown argument " << curr_arg << std::endl;
@@ -148,6 +155,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	ID3D11Texture2D *pRenderTarget = NULL;
 	device->CreateTexture2D(&desc, NULL, &pRenderTarget);
+	assert(pRenderTarget != nullptr);
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtDesc;
 	rtDesc.Format = desc.Format;
@@ -156,8 +164,8 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	ID3D11RenderTargetView *pRenderTargetView = NULL;
 	device->CreateRenderTargetView(pRenderTarget, &rtDesc, &pRenderTargetView);
-
-	psBlob->Release();
+	checkFail(SaveWICTextureToFile(context.Get(), pRenderTarget,
+			GUID_ContainerFormatJpeg, output.c_str()));
 
 	std::cerr << "OK" << std::endl;
 
