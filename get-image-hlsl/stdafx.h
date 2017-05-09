@@ -9,26 +9,27 @@
 
 #include "targetver.h"
 
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
 
 #include <tchar.h>
 
 #include <d3dcompiler.h>
 
-#include <d3d11_3.h>
-#include <d2d1_3.h>
-#include <d2d1effects_2.h>
-#include <dwrite_3.h>
-#include <wincodec.h>
 #include <DirectXColors.h>
 #include <DirectXMath.h>
-#include <memory>
-#include <concrt.h>
 #include <Windows.h>
+#include <concrt.h>
+#include <d2d1_3.h>
+#include <d2d1effects_2.h>
+#include <d3d11_3.h>
+#include <dwrite_3.h>
+#include <memory>
+#include <wincodec.h>
 #include <wrl/client.h>
 
-// " to simplify the tutorial we will go ahead and add them all to your new project's pch.h header" lol
+// " to simplify the tutorial we will go ahead and add them all to your new
+// project's pch.h header" lol
 
 #include "CommonStates.h"
 #include "DDSTextureLoader.h"
@@ -50,5 +51,5 @@
 
 #include <comdef.h>
 
-#pragma comment(lib,"d3dcompiler.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "d3d11.lib")
