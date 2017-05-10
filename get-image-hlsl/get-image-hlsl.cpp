@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "get-image-hlsl.h"
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
@@ -16,6 +17,37 @@ void checkFail(HRESULT hr) {
 	}
 }
 
+
+void PrintErrorBlob(ID3DBlob * errorBlob)
+{
+	if (errorBlob) {
+		// FIXME: This is incredibly stupid code and I can imagine no earthly
+		// reason for it to be necessary. All of the obvious things to do here
+		// seemed to produce no output when run, but that must be the result of
+		// me doing something wrong. However, this works for now.
+		auto n = errorBlob->GetBufferSize();
+		auto err = (char *)errorBlob->GetBufferPointer();
+		for (auto i = 0UL; i < n; i++) {
+			if (!err[i])
+				break;
+			std::cerr << err[i];
+		}
+		std::cerr << std::endl;
+		errorBlob->Release();
+	}
+}
+
+
+const char* vertex_shader_source =
+"struct VertexShaderInput { float2 position: POSITION; };\n"
+"struct PixelShaderInput { float4 position : SV_POSITION; };\n"
+"\n"
+"PixelShaderInput main(VertexShaderInput input) {\n"
+"  PixelShaderInput output;\n"
+"  output.position = float4(input.position, 0.0, 1.0);\n"
+"  return output;\n"
+"};\n";
+
 void CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
 	if (!srcFile || !entryPoint || !profile || !blob)
@@ -32,38 +64,44 @@ void CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 		D3DCompileFromFile(srcFile, defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
 			entryPoint, profile, flags, 0, blob, &errorBlob);
 	if (FAILED(hr)) {
-		if (errorBlob) {
-			// FIXME: This is incredibly stupid code and I can imagine no earthly
-			// reason for it to be necessary. All of the obvious things to do here
-			// seemed to produce no output when run, but that must be the result of
-			// me doing something wrong. However, this works for now.
-			auto n = errorBlob->GetBufferSize();
-			auto err = (char *)errorBlob->GetBufferPointer();
-			for (auto i = 0UL; i < n; i++) {
-				if (!err[i])
-					break;
-				std::cerr << err[i];
-			}
-			std::cerr << std::endl;
-			errorBlob->Release();
-		}
+		PrintErrorBlob(errorBlob);
 
 		checkFail(hr);
 	}
 }
+
+
+
+void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
+	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
+	if (!srcCode || !entryPoint || !profile || !blob)
+		exit(1);
+
+	*blob = nullptr;
+
+	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG;
+
+	const D3D_SHADER_MACRO defines[] = { NULL, NULL };
+
+	ID3DBlob *errorBlob = nullptr;
+	HRESULT hr =
+		D3DCompile(srcCode, strlen(srcCode), "<string>", defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			entryPoint, profile, flags, 0, blob, &errorBlob);
+	if (FAILED(hr)) {
+		PrintErrorBlob(errorBlob);
+
+		checkFail(hr);
+	}
+}
+
 int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
-	std::wstring vertex_shader;
 	std::wstring pixel_shader;
 	std::wstring output(L"output.png");
 
 	for (int i = 1; i < argc; i++) {
 		std::wstring curr_arg = std::wstring(argv[i]);
 		if (!curr_arg.compare(0, 2, L"--")) {
-			if (curr_arg == L"--vertex") {
-				vertex_shader = argv[++i];
-				continue;
-			}
-			else if (curr_arg == L"--output") {
+			if (curr_arg == L"--output") {
 				output = argv[++i];
 				continue;
 			}
@@ -130,42 +168,58 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	checkFail(_device->CreatePixelShader(psBlob->GetBufferPointer(),
 		psBlob->GetBufferSize(), nullptr,
 		&pixelShader));
-	context->PSSetShader(pixelShader, nullptr, 0);
 
-	if (vertex_shader.length() > 0) {
-		// Now do the same for the vertex shader if we have one.
-		CompileShader(vertex_shader.c_str(), "main", "vs_4_0_level_9_1", &vsBlob);
-		ID3D11VertexShader *vertexShader = nullptr;
-		checkFail(_device->CreateVertexShader(vsBlob->GetBufferPointer(),
-			vsBlob->GetBufferSize(), nullptr,
-			&vertexShader));
-		context->VSSetShader(vertexShader, nullptr, 0);
-	}
+	ID3D11VertexShader *vertexShader = nullptr;
+
+	CompileShaderStr(vertex_shader_source, "main", "vs_4_0_level_9_1", &vsBlob);
+	checkFail(_device->CreateVertexShader(vsBlob->GetBufferPointer(),
+		vsBlob->GetBufferSize(), nullptr,
+		&vertexShader));
+
+
 	// Create the render target texture
-	D3D11_TEXTURE2D_DESC desc;
-	ZeroMemory(&desc, sizeof(desc));
-	desc.Width = 256;
-	desc.Height = 256;
-	desc.MipLevels = 1;
-	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	desc.SampleDesc.Count = 1;
-	desc.Usage = D3D11_USAGE_DEFAULT;
-	desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	D3D11_TEXTURE2D_DESC textureDesc;
+	ZeroMemory(&textureDesc, sizeof(textureDesc));
+	textureDesc.Width = 256;
+	textureDesc.Height = 256;
+	textureDesc.MipLevels = 1;
+	textureDesc.ArraySize = 1;
+	textureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	textureDesc.SampleDesc.Count = 1;
+	textureDesc.Usage = D3D11_USAGE_DEFAULT;
+	textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-	ID3D11Texture2D *pRenderTarget = NULL;
-	device->CreateTexture2D(&desc, NULL, &pRenderTarget);
-	assert(pRenderTarget != nullptr);
+	ID3D11Texture2D *renderTarget = NULL;
+	device->CreateTexture2D(&textureDesc, NULL, &renderTarget);
+	assert(renderTarget != nullptr);
 
 	D3D11_RENDER_TARGET_VIEW_DESC rtDesc;
-	rtDesc.Format = desc.Format;
+	rtDesc.Format = textureDesc.Format;
 	rtDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtDesc.Texture2D.MipSlice = 0;
 
 	ID3D11RenderTargetView *pRenderTargetView = NULL;
-	device->CreateRenderTargetView(pRenderTarget, &rtDesc, &pRenderTargetView);
-	checkFail(SaveWICTextureToFile(context.Get(), pRenderTarget,
-			GUID_ContainerFormatJpeg, output.c_str()));
+	checkFail(device->CreateRenderTargetView(renderTarget, &rtDesc, &pRenderTargetView));
+
+	assert(pRenderTargetView != nullptr);
+
+	context->OMSetRenderTargets(1, &pRenderTargetView, nullptr);
+
+
+
+	context->PSSetShader(pixelShader, nullptr, 0);
+
+	context->VSSetShader(vertexShader, nullptr, 0);
+
+	context->DrawIndexed(
+		2,
+		0,
+		0
+	);
+	context->Flush();
+
+	checkFail(SaveWICTextureToFile(context.Get(), renderTarget,
+		GUID_ContainerFormatJpeg, output.c_str()));
 
 	std::cerr << "OK" << std::endl;
 
