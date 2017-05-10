@@ -48,6 +48,10 @@ const char* vertex_shader_source =
 "  return output;\n"
 "};\n";
 
+struct VertexShaderInput {
+	DirectX::XMFLOAT2 position;
+};
+
 void CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
 	if (!srcFile || !entryPoint || !profile || !blob)
@@ -160,7 +164,6 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	assert(context.Get());
 
 	ID3DBlob *psBlob = nullptr;
-	ID3DBlob *vsBlob = nullptr;
 	CompileShader(pixel_shader.c_str(), "main", "ps_4_0_level_9_1", &psBlob);
 
 	// First compile and attach the pixel shader.
@@ -170,12 +173,43 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 		&pixelShader));
 
 	ID3D11VertexShader *vertexShader = nullptr;
-
+	ID3DBlob *vsBlob = nullptr;
 	CompileShaderStr(vertex_shader_source, "main", "vs_4_0_level_9_1", &vsBlob);
 	checkFail(_device->CreateVertexShader(vsBlob->GetBufferPointer(),
 		vsBlob->GetBufferSize(), nullptr,
 		&vertexShader));
 
+	VertexShaderInput vertices[] = {
+		{{-1.0f,  1.0f}},
+		{{-1.0f, -1.0f}},
+		{{ 1.0f, -1.0f}},
+		{{1.0f,  1.0f}}
+	};
+
+	ID3D11Buffer *vertexBuffer;
+
+	D3D11_BUFFER_DESC bd;
+	ZeroMemory(&bd, sizeof(bd));
+
+	bd.Usage = D3D11_USAGE_DYNAMIC;
+	bd.ByteWidth = sizeof(VertexShaderInput) * 3;
+	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	device->CreateBuffer(&bd, NULL, &vertexBuffer);
+
+	D3D11_MAPPED_SUBRESOURCE ms;
+	context->Map(vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);
+	memcpy(ms.pData, vertices, sizeof(vertices));
+	context->Unmap(vertexBuffer, NULL);
+
+	D3D11_INPUT_ELEMENT_DESC inputDescription[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	};
+
+	ID3D11InputLayout *inputLayout;
+	device->CreateInputLayout(inputDescription, 1, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &inputLayout);
+	context->IASetInputLayout(inputLayout);
 
 	// Create the render target texture
 	D3D11_TEXTURE2D_DESC textureDesc;
@@ -205,11 +239,38 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	context->OMSetRenderTargets(1, &pRenderTargetView, nullptr);
 
-
-
 	context->PSSetShader(pixelShader, nullptr, 0);
 
 	context->VSSetShader(vertexShader, nullptr, 0);
+
+
+	ID3D11Buffer *indexBuffer = NULL;
+
+	// Create indices.
+	unsigned int indices[] = {
+		0, 1, 2,
+		2, 3, 0
+	};
+
+	// Fill in a buffer description.
+	D3D11_BUFFER_DESC bufferDesc;
+	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufferDesc.ByteWidth = sizeof(unsigned int) * 3;
+	bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	bufferDesc.CPUAccessFlags = 0;
+	bufferDesc.MiscFlags = 0;
+
+	// Define the resource data.
+	D3D11_SUBRESOURCE_DATA InitData;
+	InitData.pSysMem = indices;
+	InitData.SysMemPitch = 0;
+	InitData.SysMemSlicePitch = 0;
+
+	// Create the buffer with the device.
+	checkFail(device->CreateBuffer(&bufferDesc, &InitData, &indexBuffer));
+
+	// Set the buffer.
+	context->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
 	context->DrawIndexed(
 		2,
