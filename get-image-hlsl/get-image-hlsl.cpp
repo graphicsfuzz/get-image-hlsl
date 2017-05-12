@@ -40,11 +40,12 @@ void PrintErrorBlob(ID3DBlob * errorBlob)
 
 const char* vertex_shader_source =
 "struct VertexShaderInput { float2 position: POSITION; };\n"
-"struct PixelShaderInput { float4 position : SV_POSITION; };\n"
+"struct PixelShaderInput { float4 position : SV_POSITION; float3 colour : COLOR0;};\n"
 "\n"
 "PixelShaderInput main(VertexShaderInput input) {\n"
 "  PixelShaderInput output;\n"
 "  output.position = float4(input.position, 0.0, 1.0);\n"
+"  output.colour = float3(0, 0, 0);\n"
 "  return output;\n"
 "};\n";
 
@@ -211,6 +212,11 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	device->CreateInputLayout(inputDescription, 1, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &inputLayout);
 	context->IASetInputLayout(inputLayout);
 
+	UINT stride = sizeof(VertexShaderInput);
+	UINT offset = 0;
+	context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	// Create the render target texture
 	D3D11_TEXTURE2D_DESC textureDesc;
 	ZeroMemory(&textureDesc, sizeof(textureDesc));
@@ -243,7 +249,6 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	context->VSSetShader(vertexShader, nullptr, 0);
 
-
 	ID3D11Buffer *indexBuffer = NULL;
 
 	// Create indices.
@@ -272,15 +277,21 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	// Set the buffer.
 	context->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
-	context->DrawIndexed(
-		2,
-		0,
-		0
-	);
+	D3D11_VIEWPORT viewport;
+	viewport.TopLeftX = D3D11_VIEWPORT_BOUNDS_MIN;
+	viewport.TopLeftY = D3D11_VIEWPORT_BOUNDS_MIN;
+	viewport.Width = 256;
+	viewport.Height = 256;
+	viewport.MinDepth = 0;
+	viewport.MaxDepth = 1;
+
+	context->RSSetViewports(1, &viewport);
+
+	context->DrawIndexed(2, 0, 0);
 	context->Flush();
 
 	checkFail(SaveWICTextureToFile(context.Get(), renderTarget,
-		GUID_ContainerFormatJpeg, output.c_str()));
+		GUID_ContainerFormatPng, output.c_str()));
 
 	std::cerr << "OK" << std::endl;
 
