@@ -45,7 +45,7 @@ const char* vertex_shader_source =
 "PixelShaderInput main(VertexShaderInput input) {\n"
 "  PixelShaderInput output;\n"
 "  output.position = float4(input.position, 0.0, 1.0);\n"
-"  output.colour = float3(0, 0, 0);\n"
+"  output.colour = float3(256, 256, 256);\n"
 "  return output;\n"
 "};\n";
 
@@ -133,161 +133,146 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	checkFail(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED));
 #endif
 
-	ComPtr<ID3D11Device> _device;
-	ComPtr<ID3D11DeviceContext> _context;
-
-	D3D_FEATURE_LEVEL featureLevel;
-
-	checkFail(
-		D3D11CreateDevice(
-			nullptr, /* Adapter: The adapter (video card) we want to use. We may
-						use NULL to pick the default adapter. */
-			D3D_DRIVER_TYPE_HARDWARE, /* DriverType: We use the GPU as backing
-										 device. */
-			NULL, /* Software: we're using a D3D_DRIVER_TYPE_HARDWARE so it's not
-					 applicaple. */
-			D3D11_CREATE_DEVICE_DEBUG,
-			NULL, /* Feature Levels (ptr to array):  what version to use. */
-			0,    /* Number of feature levels. */
-			D3D11_SDK_VERSION,      /* The SDK version, use D3D11_SDK_VERSION */
-			_device.GetAddressOf(), /* OUT: the ID3D11Device object. */
-			&featureLevel,          /* OUT: the selected feature level. */
-			_context.GetAddressOf())); /* OUT: the ID3D11DeviceContext that
-										  represents the above features. */
-
 	ComPtr<ID3D11Device3> device;
-	checkFail(_device.As(&device));
-
 	ComPtr<ID3D11DeviceContext3> context;
-	checkFail(_context.As(&context));
 
-	assert(device.Get());
-	assert(context.Get());
+	InitializeDeviceAndContext(device, context);
 
 	ID3DBlob *psBlob = nullptr;
-	CompileShader(pixel_shader.c_str(), "main", "ps_4_0_level_9_1", &psBlob);
-
-	// First compile and attach the pixel shader.
-	ID3D11PixelShader *pixelShader = nullptr;
-	checkFail(_device->CreatePixelShader(psBlob->GetBufferPointer(),
-		psBlob->GetBufferSize(), nullptr,
-		&pixelShader));
-
-	ID3D11VertexShader *vertexShader = nullptr;
 	ID3DBlob *vsBlob = nullptr;
-	CompileShaderStr(vertex_shader_source, "main", "vs_4_0_level_9_1", &vsBlob);
-	checkFail(_device->CreateVertexShader(vsBlob->GetBufferPointer(),
-		vsBlob->GetBufferSize(), nullptr,
-		&vertexShader));
+	ID3D11VertexShader *vertexShader = nullptr;
+	ID3D11PixelShader *pixelShader = nullptr;
 
-	VertexShaderInput vertices[] = {
-		{{-1.0f,  1.0f}},
-		{{-1.0f, -1.0f}},
-		{{ 1.0f, -1.0f}},
-		{{1.0f,  1.0f}}
-	};
-
-	ID3D11Buffer *vertexBuffer;
-
-	D3D11_BUFFER_DESC bd;
-	ZeroMemory(&bd, sizeof(bd));
-
-	bd.Usage = D3D11_USAGE_DYNAMIC;
-	bd.ByteWidth = sizeof(VertexShaderInput) * 3;
-	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	device->CreateBuffer(&bd, NULL, &vertexBuffer);
-
-	D3D11_MAPPED_SUBRESOURCE ms;
-	context->Map(vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);
-	memcpy(ms.pData, vertices, sizeof(vertices));
-	context->Unmap(vertexBuffer, NULL);
-
-	D3D11_INPUT_ELEMENT_DESC inputDescription[] =
+	// Initialize shaders
 	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	};
+		CompileShader(pixel_shader.c_str(), "main", "ps_4_0_level_9_1", &psBlob);
 
-	ID3D11InputLayout *inputLayout;
-	device->CreateInputLayout(inputDescription, 1, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &inputLayout);
-	context->IASetInputLayout(inputLayout);
+		checkFail(device->CreatePixelShader(psBlob->GetBufferPointer(),
+			psBlob->GetBufferSize(), nullptr,
+			&pixelShader));
 
-	UINT stride = sizeof(VertexShaderInput);
-	UINT offset = 0;
-	context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
-	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		CompileShaderStr(vertex_shader_source, "main", "vs_4_0_level_9_1", &vsBlob);
+		checkFail(device->CreateVertexShader(vsBlob->GetBufferPointer(),
+			vsBlob->GetBufferSize(), nullptr,
+			&vertexShader));
 
-	// Create the render target texture
-	D3D11_TEXTURE2D_DESC textureDesc;
-	ZeroMemory(&textureDesc, sizeof(textureDesc));
-	textureDesc.Width = 256;
-	textureDesc.Height = 256;
-	textureDesc.MipLevels = 1;
-	textureDesc.ArraySize = 1;
-	textureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	textureDesc.SampleDesc.Count = 1;
-	textureDesc.Usage = D3D11_USAGE_DEFAULT;
-	textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		context->PSSetShader(pixelShader, nullptr, 0);
+		context->VSSetShader(vertexShader, nullptr, 0);
+	}
+
+	// Set up the vertices
+	{
+		ID3D11Buffer *vertexBuffer;
+
+		{
+			VertexShaderInput vertices[] = {
+				{{-1.0f,  1.0f}},
+				{{-1.0f, -1.0f}},
+				{{ 1.0f, -1.0f}},
+				{{1.0f,  1.0f}}
+			};
+
+			D3D11_BUFFER_DESC bd;
+			ZeroMemory(&bd, sizeof(bd));
+
+			bd.Usage = D3D11_USAGE_DYNAMIC;
+			bd.ByteWidth = sizeof(VertexShaderInput) * 3;
+			bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+			bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			device->CreateBuffer(&bd, NULL, &vertexBuffer);
+
+			D3D11_MAPPED_SUBRESOURCE ms;
+			context->Map(vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);
+			memcpy(ms.pData, vertices, sizeof(vertices));
+			context->Unmap(vertexBuffer, NULL);
+		}
+
+		D3D11_INPUT_ELEMENT_DESC inputDescription[] =
+		{
+			{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		};
+
+		ID3D11InputLayout *inputLayout;
+		device->CreateInputLayout(inputDescription, 1, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &inputLayout);
+		context->IASetInputLayout(inputLayout);
+
+		UINT stride = sizeof(VertexShaderInput);
+		UINT offset = 0;
+		context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	}
 
 	ID3D11Texture2D *renderTarget = NULL;
-	device->CreateTexture2D(&textureDesc, NULL, &renderTarget);
-	assert(renderTarget != nullptr);
 
-	D3D11_RENDER_TARGET_VIEW_DESC rtDesc;
-	rtDesc.Format = textureDesc.Format;
-	rtDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-	rtDesc.Texture2D.MipSlice = 0;
+	// Create the render target and set things up to render to it
+	{
+		ID3D11RenderTargetView *renderTargetView = NULL;
+		// Create the render target texture
+		D3D11_TEXTURE2D_DESC textureDesc;
+		ZeroMemory(&textureDesc, sizeof(textureDesc));
+		textureDesc.Width = 256;
+		textureDesc.Height = 256;
+		textureDesc.MipLevels = 1;
+		textureDesc.ArraySize = 1;
+		textureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+		textureDesc.SampleDesc.Count = 1;
+		textureDesc.Usage = D3D11_USAGE_DEFAULT;
+		textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-	ID3D11RenderTargetView *pRenderTargetView = NULL;
-	checkFail(device->CreateRenderTargetView(renderTarget, &rtDesc, &pRenderTargetView));
+		device->CreateTexture2D(&textureDesc, NULL, &renderTarget);
+		assert(renderTarget != nullptr);
 
-	assert(pRenderTargetView != nullptr);
+		D3D11_RENDER_TARGET_VIEW_DESC renderTargetDescription;
+		renderTargetDescription.Format = textureDesc.Format;
+		renderTargetDescription.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+		renderTargetDescription.Texture2D.MipSlice = 0;
 
-	context->OMSetRenderTargets(1, &pRenderTargetView, nullptr);
+		checkFail(device->CreateRenderTargetView(renderTarget, &renderTargetDescription, &renderTargetView));
 
-	context->PSSetShader(pixelShader, nullptr, 0);
-
-	context->VSSetShader(vertexShader, nullptr, 0);
-
-	ID3D11Buffer *indexBuffer = NULL;
+		assert(renderTargetView != nullptr);
+		context->OMSetRenderTargets(1, &renderTargetView, nullptr);
+	}
 
 	// Create indices.
-	unsigned int indices[] = {
-		0, 1, 2,
-		2, 3, 0
-	};
+	{
+		ID3D11Buffer *indexBuffer = NULL;
+		unsigned int indices[] = {
+			0, 1, 2,
+			2, 3, 0
+		};
 
-	// Fill in a buffer description.
-	D3D11_BUFFER_DESC bufferDesc;
-	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	bufferDesc.ByteWidth = sizeof(unsigned int) * 3;
-	bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	bufferDesc.CPUAccessFlags = 0;
-	bufferDesc.MiscFlags = 0;
+		// Fill in a buffer description.
+		D3D11_BUFFER_DESC bufferDesc;
+		bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+		bufferDesc.ByteWidth = sizeof(unsigned int) * 3;
+		bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+		bufferDesc.CPUAccessFlags = 0;
+		bufferDesc.MiscFlags = 0;
 
-	// Define the resource data.
-	D3D11_SUBRESOURCE_DATA InitData;
-	InitData.pSysMem = indices;
-	InitData.SysMemPitch = 0;
-	InitData.SysMemSlicePitch = 0;
+		// Define the resource data.
+		D3D11_SUBRESOURCE_DATA InitData;
+		InitData.pSysMem = indices;
+		InitData.SysMemPitch = 0;
+		InitData.SysMemSlicePitch = 0;
 
-	// Create the buffer with the device.
-	checkFail(device->CreateBuffer(&bufferDesc, &InitData, &indexBuffer));
+		// Create the buffer with the device.
+		checkFail(device->CreateBuffer(&bufferDesc, &InitData, &indexBuffer));
+		context->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	}
+	// Create a viewport 
+	{
+		D3D11_VIEWPORT viewport;
+		viewport.TopLeftX = D3D11_VIEWPORT_BOUNDS_MIN;
+		viewport.TopLeftY = D3D11_VIEWPORT_BOUNDS_MIN;
+		viewport.Width = 256;
+		viewport.Height = 256;
+		viewport.MinDepth = 0;
+		viewport.MaxDepth = 1;
 
-	// Set the buffer.
-	context->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		context->RSSetViewports(1, &viewport);
+	}
 
-	D3D11_VIEWPORT viewport;
-	viewport.TopLeftX = D3D11_VIEWPORT_BOUNDS_MIN;
-	viewport.TopLeftY = D3D11_VIEWPORT_BOUNDS_MIN;
-	viewport.Width = 256;
-	viewport.Height = 256;
-	viewport.MinDepth = 0;
-	viewport.MaxDepth = 1;
-
-	context->RSSetViewports(1, &viewport);
-
-	context->DrawIndexed(2, 0, 0);
+	context->DrawIndexed(6, 0, 0);
 	context->Flush();
 
 	checkFail(SaveWICTextureToFile(context.Get(), renderTarget,
@@ -296,4 +281,37 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	std::cerr << "OK" << std::endl;
 
 	return 0;
+}
+
+void InitializeDeviceAndContext(Microsoft::WRL::ComPtr<ID3D11Device3> &device, Microsoft::WRL::ComPtr<ID3D11DeviceContext3> &context)
+{
+
+	ComPtr<ID3D11Device> _device;
+	ComPtr<ID3D11DeviceContext> _context;
+
+	D3D_FEATURE_LEVEL featureLevel;
+
+	checkFail(
+		D3D11CreateDevice(
+			nullptr, /* Adapter: The adapter (video card) we want to use. We may
+					 use NULL to pick the default adapter. */
+			D3D_DRIVER_TYPE_HARDWARE, /* DriverType: We use the GPU as backing
+									  device. */
+			NULL, /* Software: we're using a D3D_DRIVER_TYPE_HARDWARE so it's not
+				  applicaple. */
+			D3D11_CREATE_DEVICE_DEBUG,
+			NULL, /* Feature Levels (ptr to array):  what version to use. */
+			0,    /* Number of feature levels. */
+			D3D11_SDK_VERSION,      /* The SDK version, use D3D11_SDK_VERSION */
+			_device.GetAddressOf(), /* OUT: the ID3D11Device object. */
+			&featureLevel,          /* OUT: the selected feature level. */
+			_context.GetAddressOf())); /* OUT: the ID3D11DeviceContext that
+									   represents the above features. */
+
+	checkFail(_device.As(&device));
+
+	checkFail(_context.As(&context));
+
+	assert(device.Get());
+	assert(context.Get());
 }
