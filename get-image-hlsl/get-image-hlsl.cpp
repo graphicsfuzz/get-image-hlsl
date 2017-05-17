@@ -1,5 +1,4 @@
 #include "stdafx.h"
-#include "get-image-hlsl.h"
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
