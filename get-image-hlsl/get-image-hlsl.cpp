@@ -15,6 +15,7 @@ ID3D11DeviceContext1*   g_pImmediateContext1 = nullptr;
 // Forward declarations
 //--------------------------------------------------------------------------------------
 HRESULT InitDevice(std::wstring);
+void OutputPixelShader(std::wstring &output);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 
 
@@ -60,7 +61,7 @@ const char* vertex_shader_source =
 "PixelShaderInput main(VertexShaderInput input) {\n"
 "  PixelShaderInput output;\n"
 "  output.position = float4(input.position, 0.0, 1.0);\n"
-"  output.colour = float3(256, 256, 256);\n"
+"  output.colour = float3(1, 1, 1);\n"
 "  return output;\n"
 "};\n";
 
@@ -145,6 +146,17 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	checkFail(InitDevice(pixel_shader));
 
 	// Clear the back buffer 
+	OutputPixelShader(output);
+
+	return 0;
+}
+
+void OutputPixelShader(std::wstring &output)
+{
+	/*	
+	Take our pixel shader and write it to an output image as a PNG.
+	*/
+
 	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
 
 	g_pImmediateContext->VSSetShader(g_pVertexShader, nullptr, 0);
@@ -160,10 +172,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 		reinterpret_cast<LPVOID*>(backBuffer.GetAddressOf())));
 	checkFail(SaveWICTextureToFile(g_pImmediateContext, backBuffer.Get(),
 		GUID_ContainerFormatPng, output.c_str()));
-
-	return 0;
 }
-
 
 struct SimpleVertex
 {
@@ -172,6 +181,13 @@ struct SimpleVertex
 
 HRESULT InitDevice(std::wstring pixel_shader)
 {
+	/*
+	This function does all the set up we need to actually produce our image.
+
+	It's very much cobbled together from tutorials and I'd be lying if I said I fully
+	understood it.
+	
+	*/
 	HWND                    g_hWnd = nullptr;
 	D3D_DRIVER_TYPE         g_driverType = D3D_DRIVER_TYPE_NULL;
 	D3D_FEATURE_LEVEL       g_featureLevel = D3D_FEATURE_LEVEL_11_0;
@@ -200,7 +216,6 @@ HRESULT InitDevice(std::wstring pixel_shader)
 	if (!RegisterClassEx(&wcex))
 		return E_FAIL;
 
-	// Create window
 	RECT rc = { 0, 0, 800, 600 };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
@@ -220,10 +235,7 @@ HRESULT InitDevice(std::wstring pixel_shader)
 	UINT width = rc.right - rc.left;
 	UINT height = rc.bottom - rc.top;
 
-	UINT createDeviceFlags = 0;
-#ifdef _DEBUG
-	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
+	UINT createDeviceFlags = D3D11_CREATE_DEVICE_DEBUG;
 
 	D3D_DRIVER_TYPE driverTypes[] =
 	{
@@ -258,8 +270,7 @@ HRESULT InitDevice(std::wstring pixel_shader)
 		if (SUCCEEDED(hr))
 			break;
 	}
-	if (FAILED(hr))
-		return hr;
+	checkFail(hr);
 
 	// Obtain DXGI factory from device (since we used nullptr for pAdapter above)
 	IDXGIFactory1* dxgiFactory = nullptr;
@@ -269,17 +280,13 @@ HRESULT InitDevice(std::wstring pixel_shader)
 		if (SUCCEEDED(hr))
 		{
 			IDXGIAdapter* adapter = nullptr;
-			hr = dxgiDevice->GetAdapter(&adapter);
-			if (SUCCEEDED(hr))
-			{
-				hr = adapter->GetParent(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&dxgiFactory));
-				adapter->Release();
-			}
+			checkFail(dxgiDevice->GetAdapter(&adapter));
+			checkFail(adapter->GetParent(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&dxgiFactory)));
+			adapter->Release();
 			dxgiDevice->Release();
 		}
 	}
-	if (FAILED(hr))
-		return hr;
+
 
 	// Create swap chain
 	IDXGIFactory2* dxgiFactory2 = nullptr;
@@ -303,11 +310,8 @@ HRESULT InitDevice(std::wstring pixel_shader)
 		sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		sd.BufferCount = 1;
 
-		hr = dxgiFactory2->CreateSwapChainForHwnd(g_pd3dDevice, g_hWnd, &sd, nullptr, nullptr, &g_pSwapChain1);
-		if (SUCCEEDED(hr))
-		{
-			hr = g_pSwapChain1->QueryInterface(__uuidof(IDXGISwapChain), reinterpret_cast<void**>(&g_pSwapChain));
-		}
+		checkFail(dxgiFactory2->CreateSwapChainForHwnd(g_pd3dDevice, g_hWnd, &sd, nullptr, nullptr, &g_pSwapChain1));
+		checkFail(g_pSwapChain1->QueryInterface(__uuidof(IDXGISwapChain), reinterpret_cast<void**>(&g_pSwapChain)));
 
 		dxgiFactory2->Release();
 	}
@@ -328,24 +332,17 @@ HRESULT InitDevice(std::wstring pixel_shader)
 		sd.SampleDesc.Quality = 0;
 		sd.Windowed = TRUE;
 
-		hr = dxgiFactory->CreateSwapChain(g_pd3dDevice, &sd, &g_pSwapChain);
+		checkFail(dxgiFactory->CreateSwapChain(g_pd3dDevice, &sd, &g_pSwapChain));
 	}
 
 	dxgiFactory->Release();
 
-	if (FAILED(hr))
-		return hr;
-
 	// Create a render target view
 	ID3D11Texture2D* pBackBuffer = nullptr;
-	hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&pBackBuffer));
-	if (FAILED(hr))
-		return hr;
+	checkFail(g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&pBackBuffer)));
 
-	hr = g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_pRenderTargetView);
+	checkFail(g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_pRenderTargetView));
 	pBackBuffer->Release();
-	if (FAILED(hr))
-		return hr;
 
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
 
@@ -375,11 +372,9 @@ HRESULT InitDevice(std::wstring pixel_shader)
 	UINT numElements = ARRAYSIZE(layout);
 
 	// Create the input layout
-	hr = g_pd3dDevice->CreateInputLayout(layout, numElements, pVSBlob->GetBufferPointer(),
-		pVSBlob->GetBufferSize(), &g_pVertexLayout);
+	checkFail(g_pd3dDevice->CreateInputLayout(layout, numElements, pVSBlob->GetBufferPointer(),
+		pVSBlob->GetBufferSize(), &g_pVertexLayout));
 	pVSBlob->Release();
-	if (FAILED(hr))
-		return hr;
 
 	// Set the input layout
 	g_pImmediateContext->IASetInputLayout(g_pVertexLayout);
@@ -392,7 +387,9 @@ HRESULT InitDevice(std::wstring pixel_shader)
 	checkFail(
 		g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader));
 
-	// Create vertex buffer
+	// Create vertex buffer with two separate triangles, each covering half
+	// of the screen. We use this to just cover all of the screen so that the pixel shader
+	// gets run.
 	SimpleVertex vertices[] =
 	{
 		XMFLOAT3(-1.0f, -1.0f, 0.5f),
