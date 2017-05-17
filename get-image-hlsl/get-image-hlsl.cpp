@@ -3,6 +3,14 @@
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
+// Hugues thinks this offset comes from the fact that we create a rectangle
+// window which is not exactly the size of the image. These offset leads to
+// the correct size on the turmeric machine.
+// TODO: check that we indeed obtain the correct size on other platforms.
+const int UNEXPLAINED_OFFSET_WIDTH  = 16;
+const int UNEXPLAINED_OFFSET_HEIGHT = 39;
+const int WIDTH  = 256 - UNEXPLAINED_OFFSET_WIDTH;
+const int HEIGHT = 256 - UNEXPLAINED_OFFSET_HEIGHT;
 
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
 ID3D11VertexShader*     g_pVertexShader = nullptr;
@@ -216,7 +224,7 @@ HRESULT InitDevice(std::wstring pixel_shader)
 	if (!RegisterClassEx(&wcex))
 		return E_FAIL;
 
-	RECT rc = { 0, 0, 800, 600 };
+	RECT rc = { 0, 0, WIDTH, HEIGHT};
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
 	// For unknown reasons this window does not actually get shown. It probably
