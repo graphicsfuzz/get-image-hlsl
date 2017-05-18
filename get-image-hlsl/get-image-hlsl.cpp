@@ -36,6 +36,7 @@ void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	std::wstring pixel_shader;
 	std::wstring output(L"output.png");
+	D3D_DRIVER_TYPE force_driver_type = D3D_DRIVER_TYPE_UNKNOWN;
 
 	for (int i = 1; i < argc; i++) {
 		std::wstring curr_arg = std::wstring(argv[i]);
@@ -44,10 +45,26 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 				output = argv[++i];
 				continue;
 			}
+			if (curr_arg == L"--driver") {
+				std::wstring driver_string = argv[++i];
+				if (driver_string == L"auto") {
+					continue;
+				}
+				else if (driver_string == L"hardware") {
+					force_driver_type = D3D_DRIVER_TYPE_HARDWARE;
+				}
+				else if (driver_string == L"warp") {
+					force_driver_type = D3D_DRIVER_TYPE_WARP;
+				}
+				else {
+					std::wcerr << "Unknown driver specification  " << driver_string <<
+						" expected one of auto, hardware, warp" << std::endl;
+				}
+				continue;
+			}
 
 			std::wcerr << "Unknown argument " << curr_arg << std::endl;
 			continue;
-
 		}
 		if (pixel_shader.length() == 0) {
 			pixel_shader = curr_arg;
@@ -64,16 +81,20 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	checkFail(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED));
 
-	D3D_DRIVER_TYPE driverTypes[] =
-	{
-		D3D_DRIVER_TYPE_HARDWARE,
-		D3D_DRIVER_TYPE_WARP,
-		D3D_DRIVER_TYPE_REFERENCE,
-	};
-	UINT numDriverTypes = ARRAYSIZE(driverTypes);
+	if (force_driver_type == D3D_DRIVER_TYPE_UNKNOWN) {
+		D3D_DRIVER_TYPE driverTypes[] =
+		{
+			D3D_DRIVER_TYPE_HARDWARE,
+			D3D_DRIVER_TYPE_WARP,
+			D3D_DRIVER_TYPE_REFERENCE,
+		};
+		UINT numDriverTypes = ARRAYSIZE(driverTypes);
 
-	checkFail(InitDevice(pixel_shader, numDriverTypes, driverTypes));
-
+		checkFail(InitDevice(pixel_shader, numDriverTypes, driverTypes));
+	}
+	else {
+		checkFail(InitDevice(pixel_shader, 1, &force_driver_type));
+	}
 	// Clear the back buffer 
 	OutputPixelShader(output);
 
