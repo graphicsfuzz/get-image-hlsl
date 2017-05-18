@@ -22,104 +22,16 @@ ID3D11DeviceContext1*   g_pImmediateContext1 = nullptr;
 //--------------------------------------------------------------------------------------
 // Forward declarations
 //--------------------------------------------------------------------------------------
-HRESULT InitDevice(std::wstring);
+HRESULT InitDevice(std::wstring, UINT, D3D_DRIVER_TYPE*);
 void OutputPixelShader(std::wstring &output);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-
-
-void checkFailImpl(HRESULT hr, int lineno) {
-	if (FAILED(hr)) {
-		std::cerr << "Failed at line " << lineno << std::endl;
-		LPWSTR output;
-		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS |
-			FORMAT_MESSAGE_ALLOCATE_BUFFER,
-			NULL, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPTSTR)&output, 0, NULL);
-		std::wcerr << output << std::endl;
-		exit(1);
-	}
-}
+void checkFailImpl(HRESULT, int);
+void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
+	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob);
+void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
+	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob);
 
 #define checkFail(hr) checkFailImpl(hr, __LINE__)
-
-void PrintErrorBlob(ID3DBlob * errorBlob)
-{
-	if (errorBlob) {
-		// FIXME: This is incredibly stupid code and I can imagine no earthly
-		// reason for it to be necessary. All of the obvious things to do here
-		// seemed to produce no output when run, but that must be the result of
-		// me doing something wrong. However, this works for now.
-		auto n = errorBlob->GetBufferSize();
-		auto err = (char *)errorBlob->GetBufferPointer();
-		for (auto i = 0UL; i < n; i++) {
-			if (!err[i])
-				break;
-			std::cerr << err[i];
-		}
-		std::cerr << std::endl;
-		errorBlob->Release();
-	}
-}
-
-
-const char* vertex_shader_source =
-"struct VertexShaderInput { float2 position: POSITION; };\n"
-"struct PixelShaderInput { float4 position : SV_POSITION; float3 colour : COLOR0;};\n"
-"\n"
-"PixelShaderInput main(VertexShaderInput input) {\n"
-"  PixelShaderInput output;\n"
-"  output.position = float4(input.position, 0.0, 1.0);\n"
-"  output.colour = float3(1, 1, 1);\n"
-"  return output;\n"
-"};\n";
-
-struct VertexShaderInput {
-	DirectX::XMFLOAT2 position;
-};
-
-void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
-	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
-	if (!srcFile || !entryPoint || !profile || !blob)
-		exit(1);
-
-	*blob = nullptr;
-
-	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG;
-
-	const D3D_SHADER_MACRO defines[] = { NULL, NULL };
-
-	ID3DBlob *errorBlob = nullptr;
-	HRESULT hr =
-		D3DCompileFromFile(srcFile, defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-			entryPoint, profile, flags, 0, blob, &errorBlob);
-	if (FAILED(hr)) {
-		PrintErrorBlob(errorBlob);
-
-		checkFail(hr);
-	}
-}
-
-void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
-	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
-	if (!srcCode || !entryPoint || !profile || !blob)
-		exit(1);
-
-	*blob = nullptr;
-
-	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG;
-
-	const D3D_SHADER_MACRO defines[] = { NULL, NULL };
-
-	ID3DBlob *errorBlob = nullptr;
-	HRESULT hr =
-		D3DCompile(srcCode, strlen(srcCode), "<string>", defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-			entryPoint, profile, flags, 0, blob, &errorBlob);
-	if (FAILED(hr)) {
-		PrintErrorBlob(errorBlob);
-
-		checkFail(hr);
-	}
-}
 
 int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	std::wstring pixel_shader;
@@ -151,7 +63,16 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	}
 
 	checkFail(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED));
-	checkFail(InitDevice(pixel_shader));
+
+	D3D_DRIVER_TYPE driverTypes[] =
+	{
+		D3D_DRIVER_TYPE_HARDWARE,
+		D3D_DRIVER_TYPE_WARP,
+		D3D_DRIVER_TYPE_REFERENCE,
+	};
+	UINT numDriverTypes = ARRAYSIZE(driverTypes);
+
+	checkFail(InitDevice(pixel_shader, numDriverTypes, driverTypes));
 
 	// Clear the back buffer 
 	OutputPixelShader(output);
@@ -187,7 +108,21 @@ struct SimpleVertex
 	XMFLOAT3 Pos;
 };
 
-HRESULT InitDevice(std::wstring pixel_shader)
+
+const char* vertex_shader_source =
+"struct VertexShaderInput { float2 position: POSITION; };\n"
+"struct PixelShaderInput { float4 position : SV_POSITION; float3 colour : COLOR0;};\n"
+"\n"
+"PixelShaderInput main(VertexShaderInput input) {\n"
+"  PixelShaderInput output;\n"
+"  output.position = float4(input.position, 0.0, 1.0);\n"
+"  output.colour = float3(1, 1, 1);\n"
+"  return output;\n"
+"};\n";
+
+
+
+HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 {
 	/*
 	This function does all the set up we need to actually produce our image.
@@ -245,13 +180,6 @@ HRESULT InitDevice(std::wstring pixel_shader)
 
 	UINT createDeviceFlags = D3D11_CREATE_DEVICE_DEBUG;
 
-	D3D_DRIVER_TYPE driverTypes[] =
-	{
-		D3D_DRIVER_TYPE_HARDWARE,
-		D3D_DRIVER_TYPE_WARP,
-		D3D_DRIVER_TYPE_REFERENCE,
-	};
-	UINT numDriverTypes = ARRAYSIZE(driverTypes);
 
 	D3D_FEATURE_LEVEL featureLevels[] =
 	{
@@ -451,4 +379,84 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	}
 
 	return 0;
+}
+
+
+void checkFailImpl(HRESULT hr, int lineno) {
+	if (FAILED(hr)) {
+		std::cerr << "Failed at line " << lineno << std::endl;
+		LPWSTR output;
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS |
+			FORMAT_MESSAGE_ALLOCATE_BUFFER,
+			NULL, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPTSTR)&output, 0, NULL);
+		std::wcerr << output << std::endl;
+		exit(1);
+	}
+}
+
+struct VertexShaderInput {
+	DirectX::XMFLOAT2 position;
+};
+void PrintErrorBlob(ID3DBlob * errorBlob)
+{
+	if (errorBlob) {
+		// FIXME: This is incredibly stupid code and I can imagine no earthly
+		// reason for it to be necessary. All of the obvious things to do here
+		// seemed to produce no output when run, but that must be the result of
+		// me doing something wrong. However, this works for now.
+		auto n = errorBlob->GetBufferSize();
+		auto err = (char *)errorBlob->GetBufferPointer();
+		for (auto i = 0UL; i < n; i++) {
+			if (!err[i])
+				break;
+			std::cerr << err[i];
+		}
+		std::cerr << std::endl;
+		errorBlob->Release();
+	}
+}
+
+void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
+	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
+	if (!srcFile || !entryPoint || !profile || !blob)
+		exit(1);
+
+	*blob = nullptr;
+
+	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG;
+
+	const D3D_SHADER_MACRO defines[] = { NULL, NULL };
+
+	ID3DBlob *errorBlob = nullptr;
+	HRESULT hr =
+		D3DCompileFromFile(srcFile, defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			entryPoint, profile, flags, 0, blob, &errorBlob);
+	if (FAILED(hr)) {
+		PrintErrorBlob(errorBlob);
+
+		checkFail(hr);
+	}
+}
+
+void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
+	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob) {
+	if (!srcCode || !entryPoint || !profile || !blob)
+		exit(1);
+
+	*blob = nullptr;
+
+	UINT flags = D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG;
+
+	const D3D_SHADER_MACRO defines[] = { NULL, NULL };
+
+	ID3DBlob *errorBlob = nullptr;
+	HRESULT hr =
+		D3DCompile(srcCode, strlen(srcCode), "<string>", defines, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			entryPoint, profile, flags, 0, blob, &errorBlob);
+	if (FAILED(hr)) {
+		PrintErrorBlob(errorBlob);
+
+		checkFail(hr);
+	}
 }
