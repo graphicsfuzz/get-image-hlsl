@@ -1,14 +1,25 @@
 # get-image-hlsl
 
-Long-term this will be a tool that takes a shader written in Microsoft's
+This is a tool that takes a shader written in Microsoft's
 [High Level Shading Language](https://en.wikipedia.org/wiki/High-Level_Shading_Language)
-and converts it into an image in a desired target format.
+and converts it into an image.
 
-Short-term, it's a prototype which can just about manage to compile and load
-a shader. It does however at least let you validate whether a shader written
-in HLSL compiles correctly, so there's that?
+Current limitations:
 
-Watch this space and hopefully it will become more useful.
+* The generated image is always a png (regardless of extension)
+* The generated image is always 256x256
+* It has a single hard coded vertex shader that just passes the
+  position through to the pixel shader verbatim and a colour of white.
+* It does not support passing data to the shader via uniforms.
+
+The first two would be pretty easy to fix, the latter two should be
+possible to fix but are somewhat harder.
+
+Usage:
+
+```bash
+get-image-hlsl.exe SamplePixelShader.hlsl --output sometarget.png
+```
 
 # Building
 
