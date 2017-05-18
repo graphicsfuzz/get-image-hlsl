@@ -21,6 +21,23 @@ Usage:
 get-image-hlsl.exe SamplePixelShader.hlsl --output sometarget.png
 ```
 
+You can also specify the driver type you want to use to render:
+
+```bash
+get-image-hlsl.exe SamplePixelShader.hlsl --output sometarget.png --driver reference
+```
+
+The available driver types are:
+
+* hardware (use hardware rendering)
+* warp (Microsoft's optimized software rendering implementation)
+* reference (A slow reference implementation of the full D3D feature set)
+* auto (use the best implementation available)
+
+See the [D3D_DRIVER_TYPE](https://msdn.microsoft.com/en-us/library/windows/desktop/ff476328.aspx)
+documentation for more details about these options.
+
+
 # Building
 
 This just builds in visual studio for the moment, and is written using
