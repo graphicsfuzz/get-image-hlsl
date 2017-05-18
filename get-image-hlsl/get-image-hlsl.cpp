@@ -56,9 +56,12 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 				else if (driver_string == L"warp") {
 					force_driver_type = D3D_DRIVER_TYPE_WARP;
 				}
+				else if (driver_string == L"reference") {
+					force_driver_type = D3D_DRIVER_TYPE_REFERENCE;
+				}
 				else {
 					std::wcerr << "Unknown driver specification  " << driver_string <<
-						" expected one of auto, hardware, warp" << std::endl;
+						" expected one of auto, hardware, warp, reference" << std::endl;
 				}
 				continue;
 			}
