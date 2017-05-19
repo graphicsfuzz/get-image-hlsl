@@ -3,14 +3,8 @@
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
-// Hugues thinks this offset comes from the fact that we create a rectangle
-// window which is not exactly the size of the image. These offset leads to
-// the correct size on the turmeric machine.
-// TODO: check that we indeed obtain the correct size on other platforms.
-const int UNEXPLAINED_OFFSET_WIDTH  = 16;
-const int UNEXPLAINED_OFFSET_HEIGHT = 39;
-const int WIDTH  = 256 - UNEXPLAINED_OFFSET_WIDTH;
-const int HEIGHT = 256 - UNEXPLAINED_OFFSET_HEIGHT;
+const UINT WIDTH = 256;
+const UINT HEIGHT = 256;
 
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
 ID3D11VertexShader*     g_pVertexShader = nullptr;
@@ -191,16 +185,13 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	// command line one - but it doesn't. Fortunately that's exactly what we want!
 	// But this is still surprising.
 	g_hWnd = CreateWindow(L"GetImageHLSL", L"You probably should never see this",
-		WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, nullptr, nullptr, hInstance,
 		nullptr);
 	if (!g_hWnd)
 		return E_FAIL;
 
 	HRESULT hr = S_OK;
-
-	UINT width = rc.right - rc.left;
-	UINT height = rc.bottom - rc.top;
 
 	UINT createDeviceFlags = D3D11_CREATE_DEVICE_DEBUG;
 
@@ -262,8 +253,8 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 
 		DXGI_SWAP_CHAIN_DESC1 sd;
 		ZeroMemory(&sd, sizeof(sd));
-		sd.Width = width;
-		sd.Height = height;
+		sd.Width = WIDTH;
+		sd.Height = HEIGHT;
 		sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		sd.SampleDesc.Count = 1;
 		sd.SampleDesc.Quality = 0;
@@ -281,8 +272,8 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 		DXGI_SWAP_CHAIN_DESC sd;
 		ZeroMemory(&sd, sizeof(sd));
 		sd.BufferCount = 1;
-		sd.BufferDesc.Width = width;
-		sd.BufferDesc.Height = height;
+		sd.BufferDesc.Width = WIDTH;
+		sd.BufferDesc.Height = HEIGHT;
 		sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		sd.BufferDesc.RefreshRate.Numerator = 60;
 		sd.BufferDesc.RefreshRate.Denominator = 1;
@@ -308,8 +299,8 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 
 	// Setup the viewport
 	D3D11_VIEWPORT vp;
-	vp.Width = (FLOAT)width;
-	vp.Height = (FLOAT)height;
+	vp.Width = (FLOAT)WIDTH;
+	vp.Height = (FLOAT)HEIGHT;
 	vp.MinDepth = 0.0f;
 	vp.MaxDepth = 1.0f;
 	vp.TopLeftX = 0;
