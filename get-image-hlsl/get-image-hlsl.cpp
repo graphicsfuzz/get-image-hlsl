@@ -16,13 +16,22 @@ IDXGISwapChain*         g_pSwapChain = nullptr;
 ID3D11DeviceContext*    g_pImmediateContext = nullptr;
 ID3D11DeviceContext1*   g_pImmediateContext1 = nullptr;
 ID3D11Device*           g_pd3dDevice = nullptr;
+HWND                    g_hWnd = nullptr;
+D3D_DRIVER_TYPE         g_driverType = D3D_DRIVER_TYPE_NULL;
+D3D_FEATURE_LEVEL       g_featureLevel = D3D_FEATURE_LEVEL_11_0;
+ID3D11Device1*			g_pd3dDevice1 = nullptr;
+IDXGISwapChain1*        g_pSwapChain1 = nullptr;
+
+ID3D11InputLayout*      g_pVertexLayout = nullptr;
+ID3D11Buffer*           g_pVertexBuffer = nullptr;
 
 
 //--------------------------------------------------------------------------------------
 // Forward declarations
 //--------------------------------------------------------------------------------------
-HRESULT InitDevice(std::wstring, UINT, D3D_DRIVER_TYPE*);
-void OutputPixelShader(std::wstring &output);
+HRESULT InitDevice(UINT, D3D_DRIVER_TYPE*);
+void DrawShaders(std::wstring &pixel_shader);
+void OutputPixelShader(std::wstring&, json&, std::wstring&);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 void checkFailImpl(HRESULT, int);
 void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
@@ -91,6 +100,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 		std::wcerr << "Cannot specify both --get-info and pixel shader argument" << std::endl;
 		return EXIT_FAILURE;
 	}
+
 	checkFail(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED));
 
 	if (force_driver_type == D3D_DRIVER_TYPE_UNKNOWN) {
@@ -102,27 +112,30 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 		};
 		UINT numDriverTypes = ARRAYSIZE(driverTypes);
 
-		checkFail(InitDevice(pixel_shader, numDriverTypes, driverTypes));
+		checkFail(InitDevice(numDriverTypes, driverTypes));
 	}
 	else {
-		checkFail(InitDevice(pixel_shader, 1, &force_driver_type));
+		checkFail(InitDevice(1, &force_driver_type));
 	}
+
+	json uniform_data;
 
 	if (print_adapter_info) {
 		PrintDeviceInfo();
 	} else if (pixel_shader.size() > 0) {
-		// Clear the back buffer 
-		OutputPixelShader(output);
+		OutputPixelShader(pixel_shader, uniform_data, output);
 	}
 
 	return 0;
 }
 
-void OutputPixelShader(std::wstring &output)
+void OutputPixelShader(std::wstring &pixel_shader, json& uniform_data, std::wstring &output)
 {
 	/*	
 	Take our pixel shader and write it to an output image as a PNG.
 	*/
+
+	DrawShaders(pixel_shader);
 
 	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
 
@@ -160,7 +173,7 @@ const char* vertex_shader_source =
 
 
 
-HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
+HRESULT InitDevice(UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 {
 	/*
 	This function does all the set up we need to actually produce our image.
@@ -169,15 +182,6 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	understood it.
 	
 	*/
-	HWND                    g_hWnd = nullptr;
-	D3D_DRIVER_TYPE         g_driverType = D3D_DRIVER_TYPE_NULL;
-	D3D_FEATURE_LEVEL       g_featureLevel = D3D_FEATURE_LEVEL_11_0;
-	ID3D11Device1*			g_pd3dDevice1 = nullptr;
-	IDXGISwapChain1*        g_pSwapChain1 = nullptr;
-
-	ID3D11InputLayout*      g_pVertexLayout = nullptr;
-	ID3D11Buffer*           g_pVertexBuffer = nullptr;
-
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 	// Register class
 	WNDCLASSEX wcex;
@@ -327,6 +331,12 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	vp.TopLeftY = 0;
 	g_pImmediateContext->RSSetViewports(1, &vp);
 
+	return S_OK;
+}
+
+void DrawShaders(std::wstring &pixel_shader)
+{
+
 	// Compile the vertex shader
 	ID3DBlob* pVSBlob = nullptr;
 	CompileShaderStr(vertex_shader_source, "main", "vs_4_0", &pVSBlob);
@@ -392,8 +402,6 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 
 	// Set primitive topology
 	g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	return S_OK;
 }
 
 
@@ -472,6 +480,11 @@ void checkFailImpl(HRESULT hr, int lineno) {
 struct VertexShaderInput {
 	DirectX::XMFLOAT2 position;
 };
+
+struct InjectionSwitch {
+	DirectX::XMFLOAT2 injectionSwitch;
+};
+
 void PrintErrorBlob(ID3DBlob * errorBlob)
 {
 	if (errorBlob) {
