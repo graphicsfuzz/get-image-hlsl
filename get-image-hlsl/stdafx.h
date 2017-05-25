@@ -6,6 +6,8 @@
 #pragma once
 
 #define _WIN32_WINNT 0x600
+#undef NDEBUG
+#define DEBUG
 
 #define NOMINMAX
 #include <Windows.h>
@@ -30,6 +32,9 @@
 #include <memory>
 #include <wincodec.h>
 #include <wrl/client.h>
+
+#include <sstream>
+#include <fstream>
 
 #include <codecvt>
 #include <string>

@@ -1,8 +1,9 @@
 #include "stdafx.h"
 
+#define JSON_NOEXCEPTION
 #include "json.hpp"
 
-using nlohmann::json;
+using json = nlohmann::json;
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
@@ -30,7 +31,7 @@ ID3D11Buffer*           g_pVertexBuffer = nullptr;
 // Forward declarations
 //--------------------------------------------------------------------------------------
 HRESULT InitDevice(UINT, D3D_DRIVER_TYPE*);
-void DrawShaders(std::wstring &pixel_shader);
+void LoadShaders(std::wstring &pixel_shader, json&);
 void OutputPixelShader(std::wstring&, json&, std::wstring&);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 void checkFailImpl(HRESULT, int);
@@ -39,7 +40,7 @@ void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
 void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob);
 void PrintDeviceInfo();
-
+bool readFile(const std::wstring& fileName, std::string& contentsOut);
 #define checkFail(hr) checkFailImpl(hr, __LINE__)
 
 int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
@@ -122,11 +123,21 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 	if (print_adapter_info) {
 		PrintDeviceInfo();
-	} else if (pixel_shader.size() > 0) {
-		OutputPixelShader(pixel_shader, uniform_data, output);
+		return EXIT_SUCCESS;
 	}
 
-	return 0;
+
+	assert(pixel_shader.size() > 0);
+	std::wstring jsonFilename(pixel_shader);
+	jsonFilename.replace(jsonFilename.end() - 4, jsonFilename.end(), L"json");
+	std::string jsonContent;
+	if (readFile(jsonFilename, jsonContent)) {
+		uniform_data = json::parse(jsonContent);
+	}
+
+	OutputPixelShader(pixel_shader, uniform_data, output);
+
+	return EXIT_SUCCESS;
 }
 
 void OutputPixelShader(std::wstring &pixel_shader, json& uniform_data, std::wstring &output)
@@ -135,7 +146,7 @@ void OutputPixelShader(std::wstring &pixel_shader, json& uniform_data, std::wstr
 	Take our pixel shader and write it to an output image as a PNG.
 	*/
 
-	DrawShaders(pixel_shader);
+	LoadShaders(pixel_shader, uniform_data);
 
 	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
 
@@ -334,7 +345,12 @@ HRESULT InitDevice(UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 	return S_OK;
 }
 
-void DrawShaders(std::wstring &pixel_shader)
+
+struct InjectionSwitch {
+	DirectX::XMFLOAT2 injectionSwitch;
+};
+
+void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 {
 
 	// Compile the vertex shader
@@ -402,6 +418,40 @@ void DrawShaders(std::wstring &pixel_shader)
 
 	// Set primitive topology
 	g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	if (uniform_data.is_object() && false) {
+		if (uniform_data.count("injectionSwitch") > 0) {
+			json injection_switch_json = uniform_data.at("injectionSwitch");
+			if (
+				!injection_switch_json.is_array() ||
+				injection_switch_json.size() != 2 ||
+				!injection_switch_json.at(0).is_number() ||
+				!injection_switch_json.at(1).is_number()
+			) {
+				std::cerr << "injectionSwitch should be an array of two floats but got " << injection_switch_json << " instead." << std::endl;
+				exit(EXIT_FAILURE);
+			}
+
+			InjectionSwitch injection_switch = {
+				DirectX::XMFLOAT2(injection_switch_json.at(0), injection_switch_json.at(1))
+			};
+
+			ID3D11Buffer *buffer;
+
+			D3D11_BUFFER_DESC buffer_description;
+			bd.Usage = D3D11_USAGE_DEFAULT;
+			bd.ByteWidth = sizeof(InjectionSwitch);
+			bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+			bd.CPUAccessFlags = 0;
+
+			D3D11_SUBRESOURCE_DATA init_data;
+			InitData.pSysMem = &injection_switch;
+			InitData.SysMemPitch = 0;
+			InitData.SysMemSlicePitch = 0;
+			
+			checkFail(g_pd3dDevice->CreateBuffer(&bd, &init_data, &buffer));
+		}
+	}
 }
 
 
@@ -425,8 +475,8 @@ void PrintDeviceInfo() {
 			if (SUCCEEDED(adapter->GetDesc(&desc)))
 			{
 				json j = {
-					{"Description", wstring_to_utf8(std::wstring(desc.Description)) },
-					{"VendorId", desc.VendorId},
+					{ "Description", wstring_to_utf8(std::wstring(desc.Description)) },
+					{ "VendorId", desc.VendorId},
 					{ "VendorId", desc.VendorId },
 					{ "DeviceId", desc.DeviceId },
 					{ "SubSysId", desc.SubSysId },
@@ -481,9 +531,6 @@ struct VertexShaderInput {
 	DirectX::XMFLOAT2 position;
 };
 
-struct InjectionSwitch {
-	DirectX::XMFLOAT2 injectionSwitch;
-};
 
 void PrintErrorBlob(ID3DBlob * errorBlob)
 {
@@ -547,3 +594,16 @@ void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
 		checkFail(hr);
 	}
 }
+
+
+bool readFile(const std::wstring& fileName, std::string& contentsOut){
+	std::ifstream ifs(fileName.c_str());
+	if (!ifs) {
+		return false;
+	}
+	std::stringstream ss;
+	ss << ifs.rdbuf();
+	contentsOut = ss.str();
+	return true;
+}
+

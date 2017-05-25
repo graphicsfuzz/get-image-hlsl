@@ -91,16 +91,11 @@ SOFTWARE.
 #define JSON_DEPRECATED
 #endif
 
-// allow to disable exceptions
-#if not defined(JSON_NOEXCEPTION) || defined(__EXCEPTIONS)
-#define JSON_THROW(exception) throw exception
-#define JSON_TRY try
-#define JSON_CATCH(exception) catch(exception)
-#else
-#define JSON_THROW(exception) std::abort()
+// Note: This is a hack to work around bad behaviour on windows and
+// is not suitable for general use. DRMacIver 2017-05-25
+#define JSON_THROW(exception) {std::cerr << exception.what() << std::endl; exit(1); }
 #define JSON_TRY if(true)
 #define JSON_CATCH(exception) if(false)
-#endif
 
 /*!
 @brief namespace for Niels Lohmann
