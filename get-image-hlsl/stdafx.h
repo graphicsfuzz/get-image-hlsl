@@ -7,6 +7,9 @@
 
 #define _WIN32_WINNT 0x600
 
+#define NOMINMAX
+#include <Windows.h>
+
 #include "targetver.h"
 
 #include <iostream>
@@ -18,7 +21,7 @@
 
 #include <DirectXColors.h>
 #include <DirectXMath.h>
-#include <Windows.h>
+
 #include <concrt.h>
 #include <d2d1_3.h>
 #include <d2d1effects_2.h>
