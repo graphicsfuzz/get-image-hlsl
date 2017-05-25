@@ -1,5 +1,8 @@
 #include "stdafx.h"
 
+#include "json.hpp"
+
+using nlohmann::json;
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
@@ -12,6 +15,8 @@ ID3D11PixelShader*      g_pPixelShader = nullptr;
 IDXGISwapChain*         g_pSwapChain = nullptr;
 ID3D11DeviceContext*    g_pImmediateContext = nullptr;
 ID3D11DeviceContext1*   g_pImmediateContext1 = nullptr;
+ID3D11Device*           g_pd3dDevice = nullptr;
+
 
 //--------------------------------------------------------------------------------------
 // Forward declarations
@@ -24,6 +29,7 @@ void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
 	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob);
 void CompileShaderFromFile(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 	_In_ LPCSTR profile, _Outptr_ ID3DBlob **blob);
+void PrintDeviceInfo();
 
 #define checkFail(hr) checkFailImpl(hr, __LINE__)
 
@@ -31,12 +37,17 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	std::wstring pixel_shader;
 	std::wstring output(L"output.png");
 	D3D_DRIVER_TYPE force_driver_type = D3D_DRIVER_TYPE_UNKNOWN;
+	bool print_adapter_info = false;
 
 	for (int i = 1; i < argc; i++) {
 		std::wstring curr_arg = std::wstring(argv[i]);
 		if (!curr_arg.compare(0, 2, L"--")) {
 			if (curr_arg == L"--output") {
 				output = argv[++i];
+				continue;
+			}
+			if (curr_arg == L"--get-info"){
+				print_adapter_info = true;
 				continue;
 			}
 			if (curr_arg == L"--driver") {
@@ -56,6 +67,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 				else {
 					std::wcerr << "Unknown driver specification  " << driver_string <<
 						" expected one of auto, hardware, warp, reference" << std::endl;
+					return EXIT_FAILURE;
 				}
 				continue;
 			}
@@ -71,11 +83,14 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 		}
 	}
 
-	if (pixel_shader.length() == 0) {
-		std::wcerr << "Requires pixel shader argument!" << std::endl;
+	if (!print_adapter_info && (pixel_shader.length() == 0)) {
+		std::wcerr << "Requires pixel shader argument or --get-info" << std::endl;
 		return EXIT_FAILURE;
 	}
-
+	if (print_adapter_info && (pixel_shader.length() > 0)) {
+		std::wcerr << "Cannot specify both --get-info and pixel shader argument" << std::endl;
+		return EXIT_FAILURE;
+	}
 	checkFail(CoInitializeEx(nullptr, COINITBASE_MULTITHREADED));
 
 	if (force_driver_type == D3D_DRIVER_TYPE_UNKNOWN) {
@@ -92,8 +107,13 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 	else {
 		checkFail(InitDevice(pixel_shader, 1, &force_driver_type));
 	}
-	// Clear the back buffer 
-	OutputPixelShader(output);
+
+	if (print_adapter_info) {
+		PrintDeviceInfo();
+	} else if (pixel_shader.size() > 0) {
+		// Clear the back buffer 
+		OutputPixelShader(output);
+	}
 
 	return 0;
 }
@@ -152,8 +172,7 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	HWND                    g_hWnd = nullptr;
 	D3D_DRIVER_TYPE         g_driverType = D3D_DRIVER_TYPE_NULL;
 	D3D_FEATURE_LEVEL       g_featureLevel = D3D_FEATURE_LEVEL_11_0;
-	ID3D11Device*           g_pd3dDevice = nullptr;
-	ID3D11Device1*          g_pd3dDevice1 = nullptr;
+	ID3D11Device1*			g_pd3dDevice1 = nullptr;
 	IDXGISwapChain1*        g_pSwapChain1 = nullptr;
 
 	ID3D11InputLayout*      g_pVertexLayout = nullptr;
@@ -218,8 +237,9 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 				D3D11_SDK_VERSION, &g_pd3dDevice, &g_featureLevel, &g_pImmediateContext);
 		}
 
-		if (SUCCEEDED(hr))
+		if (SUCCEEDED(hr)) {
 			break;
+		}
 	}
 	checkFail(hr);
 
@@ -245,7 +265,7 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	if (dxgiFactory2)
 	{
 		// DirectX 11.1 or later
-		hr = g_pd3dDevice->QueryInterface(__uuidof(ID3D11Device1), reinterpret_cast<void**>(&g_pd3dDevice1));
+		hr = g_pd3dDevice->QueryInterface(__uuidof(ID3D11Device1), reinterpret_cast<void**>(g_pd3dDevice1));
 		if (SUCCEEDED(hr))
 		{
 			(void)g_pImmediateContext->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void**>(&g_pImmediateContext1));
@@ -331,12 +351,14 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	g_pImmediateContext->IASetInputLayout(g_pVertexLayout);
 
 	// Compile the pixel shader
-	ID3DBlob* pPSBlob = nullptr;
-	CompileShaderFromFile(pixel_shader.c_str(), "main", "ps_4_0", &pPSBlob);
+	if (pixel_shader.size() > 0) {
+		ID3DBlob* pPSBlob = nullptr;
+		CompileShaderFromFile(pixel_shader.c_str(), "main", "ps_4_0", &pPSBlob);
 
-	// Create the pixel shader
-	checkFail(
-		g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader));
+		// Create the pixel shader
+		checkFail(
+			g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &g_pPixelShader));
+	}
 
 	// Create vertex buffer with two separate triangles, each covering half
 	// of the screen. We use this to just cover all of the screen so that the pixel shader
@@ -372,6 +394,43 @@ HRESULT InitDevice(std::wstring pixel_shader, UINT numDriverTypes, D3D_DRIVER_TY
 	g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	return S_OK;
+}
+
+
+// convert wstring to UTF-8 string
+std::string wstring_to_utf8(const std::wstring& str)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+	return myconv.to_bytes(str);
+}
+
+void PrintDeviceInfo() {
+
+	IDXGIDevice *dxgiDevice;
+	assert(g_pd3dDevice != nullptr);
+	g_pd3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
+	{
+		ComPtr<IDXGIAdapter> adapter;
+		if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)))
+		{
+			DXGI_ADAPTER_DESC desc;
+			if (SUCCEEDED(adapter->GetDesc(&desc)))
+			{
+				json j = {
+					{"Description", wstring_to_utf8(std::wstring(desc.Description)) },
+					{"VendorId", desc.VendorId},
+					{ "VendorId", desc.VendorId },
+					{ "DeviceId", desc.DeviceId },
+					{ "SubSysId", desc.SubSysId },
+					{ "Revision", desc.Revision },
+					{ "DedicatedVideoMemory", desc.DedicatedVideoMemory },
+					{ "DedicatedSystemMemory", desc.DedicatedSystemMemory },
+					{ "SharedSystemMemory", desc.SharedSystemMemory },
+				};
+				std::cout << j.dump(4) << std::endl;
+			}
+		}
+	}
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)

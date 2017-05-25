@@ -28,6 +28,9 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 
+#include <codecvt>
+#include <string>
+
 // " to simplify the tutorial we will go ahead and add them all to your new
 // project's pch.h header" lol
 
