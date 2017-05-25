@@ -419,7 +419,7 @@ void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 	// Set primitive topology
 	g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	if (uniform_data.is_object() && false) {
+	if (uniform_data.is_object()) {
 		if (uniform_data.count("injectionSwitch") > 0) {
 			json injection_switch_json = uniform_data.at("injectionSwitch");
 			if (
@@ -436,20 +436,25 @@ void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 				DirectX::XMFLOAT2(injection_switch_json.at(0), injection_switch_json.at(1))
 			};
 
-			ID3D11Buffer *buffer;
+			ID3D11Buffer *buffer = nullptr;
 
-			D3D11_BUFFER_DESC buffer_description;
-			bd.Usage = D3D11_USAGE_DEFAULT;
-			bd.ByteWidth = sizeof(InjectionSwitch);
-			bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-			bd.CPUAccessFlags = 0;
+			D3D11_BUFFER_DESC cbDesc;
+			cbDesc.ByteWidth = sizeof(InjectionSwitch);
+			cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+			cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+			cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			cbDesc.MiscFlags = 0;
+			cbDesc.StructureByteStride = 0;
 
 			D3D11_SUBRESOURCE_DATA init_data;
 			InitData.pSysMem = &injection_switch;
 			InitData.SysMemPitch = 0;
 			InitData.SysMemSlicePitch = 0;
+			assert(g_pd3dDevice != nullptr);
 			
-			checkFail(g_pd3dDevice->CreateBuffer(&bd, &init_data, &buffer));
+			checkFail(g_pd3dDevice->CreateBuffer(&cbDesc, &init_data, &buffer));
+
+			g_pImmediateContext1->PSSetConstantBuffers(0, 1, &buffer);
 		}
 	}
 }
