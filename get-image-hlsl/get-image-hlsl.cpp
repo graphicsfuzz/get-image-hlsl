@@ -56,7 +56,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 				output = argv[++i];
 				continue;
 			}
-			if (curr_arg == L"--get-info"){
+			if (curr_arg == L"--get-info") {
 				print_adapter_info = true;
 				continue;
 			}
@@ -142,7 +142,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 
 void OutputPixelShader(std::wstring &pixel_shader, json& uniform_data, std::wstring &output)
 {
-	/*	
+	/*
 	Take our pixel shader and write it to an output image as a PNG.
 	*/
 
@@ -191,7 +191,7 @@ HRESULT InitDevice(UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 
 	It's very much cobbled together from tutorials and I'd be lying if I said I fully
 	understood it.
-	
+
 	*/
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 	// Register class
@@ -211,7 +211,7 @@ HRESULT InitDevice(UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 	if (!RegisterClassEx(&wcex))
 		return E_FAIL;
 
-	RECT rc = { 0, 0, WIDTH, HEIGHT};
+	RECT rc = { 0, 0, WIDTH, HEIGHT };
 	AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
 
 	// For unknown reasons this window does not actually get shown. It probably
@@ -428,7 +428,7 @@ void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 				injection_switch_json.size() != 2 ||
 				!injection_switch_json.at(0).is_number() ||
 				!injection_switch_json.at(1).is_number()
-			) {
+				) {
 				std::cerr << "injectionSwitch should be an array of two floats but got " << injection_switch_json << " instead." << std::endl;
 				exit(EXIT_FAILURE);
 			}
@@ -452,7 +452,7 @@ void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 			init_data.SysMemPitch = 0;
 			init_data.SysMemSlicePitch = 0;
 			assert(g_pd3dDevice != nullptr);
-			
+
 			checkFail(g_pd3dDevice->CreateBuffer(&cbDesc, &init_data, &buffer));
 
 			g_pImmediateContext->PSSetConstantBuffers(0, 1, &buffer);
@@ -602,7 +602,7 @@ void CompileShaderStr(const char *srcCode, _In_ LPCSTR entryPoint,
 }
 
 
-bool readFile(const std::wstring& fileName, std::string& contentsOut){
+bool readFile(const std::wstring& fileName, std::string& contentsOut) {
 	std::ifstream ifs(fileName.c_str());
 	if (!ifs) {
 		return false;
