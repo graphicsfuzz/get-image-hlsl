@@ -346,6 +346,7 @@ HRESULT InitDevice(UINT numDriverTypes, D3D_DRIVER_TYPE *driverTypes)
 }
 
 
+__declspec(align(16))
 struct InjectionSwitch {
 	DirectX::XMFLOAT2 injectionSwitch;
 };
@@ -447,14 +448,14 @@ void LoadShaders(std::wstring &pixel_shader, json& uniform_data)
 			cbDesc.StructureByteStride = 0;
 
 			D3D11_SUBRESOURCE_DATA init_data;
-			InitData.pSysMem = &injection_switch;
-			InitData.SysMemPitch = 0;
-			InitData.SysMemSlicePitch = 0;
+			init_data.pSysMem = &injection_switch;
+			init_data.SysMemPitch = 0;
+			init_data.SysMemSlicePitch = 0;
 			assert(g_pd3dDevice != nullptr);
 			
 			checkFail(g_pd3dDevice->CreateBuffer(&cbDesc, &init_data, &buffer));
 
-			g_pImmediateContext1->PSSetConstantBuffers(0, 1, &buffer);
+			g_pImmediateContext->PSSetConstantBuffers(0, 1, &buffer);
 		}
 	}
 }
