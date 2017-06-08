@@ -83,7 +83,7 @@ int wmain(int argc, wchar_t* argv[], wchar_t *envp[]) {
 			}
 
 			std::wcerr << "Unknown argument " << curr_arg << std::endl;
-			continue;
+			return EXIT_FAILURE;
 		}
 		if (pixel_shader.length() == 0) {
 			pixel_shader = curr_arg;
